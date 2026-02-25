@@ -2,7 +2,6 @@
 name = "va-claims-mcp-server"
 version = "0.1.0"
 description = "MCP server for VA.gov Benefits Claims API"
-readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "fastmcp",

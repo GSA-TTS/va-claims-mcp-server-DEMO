@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # VA API base URL - defaults to sandbox for development
-API_BASE = os.environ.get("VA_API_BASE", "https://sandbox-api.va.gov/services/claims/v2")
+API_BASE = os.environ.get("VA_API_BASE", "https://sandbox-api.va.gov/services/claims/v1")
 
 # OAuth endpoints
-OAUTH_BASE = os.environ.get("VA_OAUTH_BASE", "https://sandbox-api.va.gov/oauth2")
+OAUTH_BASE = os.environ.get("VA_OAUTH_BASE", "https://sandbox-api.va.gov/oauth2/claims/v1")

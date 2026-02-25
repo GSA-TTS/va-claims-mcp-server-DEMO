@@ -24,8 +24,7 @@ def create_server() -> FastMCP:
 
     if not client_id or not client_secret:
         raise ValueError(
-            "Missing required environment variables: "
-            "VA_CLIENT_ID and VA_CLIENT_SECRET"
+            "Missing required environment variables: VA_CLIENT_ID and VA_CLIENT_SECRET"
         )
 
     auth = create_oauth_provider(

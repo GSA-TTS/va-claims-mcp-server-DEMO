@@ -10,7 +10,16 @@ class VAClaimsTokenVerifier(TokenVerifier):
     """
 
     def __init__(self, oauth_base: str, base_url: str | None = None):
-        super().__init__(base_url=base_url)
+        super().__init__(
+            base_url=base_url,
+            required_scopes=[
+                "openid",
+                "profile",
+                "offline_access",
+                "claim.read",
+                "claim.write",
+            ],
+        )
         self.oauth_base = oauth_base
 
     async def verify_token(self, token: str) -> AccessToken | None:
@@ -32,13 +41,16 @@ class VAClaimsTokenVerifier(TokenVerifier):
             if veteran_icn:
                 claims["veteran_icn"] = veteran_icn
 
-            # Extract scopes
-            scopes = self._extract_scopes(claims)
-
             return AccessToken(
                 token=token,
                 client_id=claims.get("sub", "unknown"),
-                scopes=scopes,
+                scopes=[
+                    "openid",
+                    "profile",
+                    "offline_access",
+                    "claim.read",
+                    "claim.write",
+                ],
                 expires_at=None,
                 claims=claims,
             )
@@ -54,33 +66,29 @@ class VAClaimsTokenVerifier(TokenVerifier):
         if "icn" in claims:
             return claims["icn"]
 
-        # VA-specific claims
         if "veteran_icn" in claims:
             return claims["veteran_icn"]
 
-        # sub claim may contain ICN in some formats
+        if "patient" in claims:
+            return claims["patient"]
+
+        # preferred_username contains ICN in VA sandbox
+        if "preferred_username" in claims:
+            username = claims["preferred_username"]
+            if "V" in username and len(username) == 17:
+                return username
+
+        # sub claim may contain ICN
         if "sub" in claims:
             sub = claims["sub"]
-            # ICN format: 10 digits + V + 6 digits (e.g., 1012667145V762142)
             if "V" in sub and len(sub) == 17:
                 return sub
 
-        # Profile claim may contain ICN
         if "profile" in claims and isinstance(claims["profile"], dict):
             if "icn" in claims["profile"]:
                 return claims["profile"]["icn"]
 
         return None
-
-    def _extract_scopes(self, claims: dict) -> list[str]:
-        """Extract scopes from claims."""
-        if "scope" not in claims:
-            return []
-        if isinstance(claims["scope"], str):
-            return claims["scope"].split()
-        if isinstance(claims["scope"], list):
-            return claims["scope"]
-        return []
 
 
 def create_oauth_provider(
@@ -103,13 +111,12 @@ def create_oauth_provider(
         upstream_client_secret=client_secret,
         upstream_authorization_endpoint=f"{oauth_base}/authorization",
         upstream_token_endpoint=f"{oauth_base}/token",
+        upstream_revocation_endpoint=f"{oauth_base}/revoke",
         token_verifier=token_verifier,
         base_url=base_url,
-        valid_scopes=[
-            "openid",
-            "profile",
-            "offline_access",
-            "claim.read",
-            "claim.write",
-        ],
+        # VA confidential clients use client_secret_basic (Authorization: Basic header),
+        # not PKCE. PKCE is a separate VA flow for public clients without a secret.
+        forward_pkce=False,
+        token_endpoint_auth_method="client_secret_basic",
+        valid_scopes=[],
     )
