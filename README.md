@@ -9,18 +9,20 @@ An MCP (Model Context Protocol) server that provides secure access to VA.gov Ben
 - **List Claims**: View all claims for a veteran
 - **Submit Claims**: Submit disability compensation claims (21-526EZ)
 - **Intent to File**: Manage intent to file to preserve effective dates
-- **Evidence Waiver**: Submit 5103 evidence waivers
+- **Power of Attorney**: Submit and manage POA appointments (21-22 / 21-22a)
 
 ## Tools Available
 
 | Tool | Description | Scope Required |
 |------|-------------|----------------|
-| `get_claim_status` | Get status of a specific claim | claim.read |
 | `list_claims` | List all claims for the veteran | claim.read |
-| `submit_5103_waiver` | Submit evidence waiver for a claim | claim.write |
-| `submit_disability_claim` | Submit a new disability claim | claim.write |
+| `get_claim_status` | Get status of a specific claim | claim.read |
+| `submit_disability_claim` | Submit a new disability claim (21-526EZ) | claim.write |
 | `get_intent_to_file` | Get current intent to file status | claim.read |
-| `submit_intent_to_file` | Submit a new intent to file | claim.write |
+| `submit_intent_to_file` | Submit a new intent to file (21-0966) | claim.write |
+| `get_active_poa` | Get the current active Power of Attorney | claim.read |
+| `get_poa_status` | Check status of a specific POA submission | claim.read |
+| `submit_poa` | Submit a Power of Attorney form (21-22 / 21-22a) | claim.write |
 
 ## Setup
 
