@@ -144,7 +144,7 @@ python-dotenv==1.2.1
     #   fastmcp
     #   pydantic-settings
     #   va-claims-mcp-server
-python-multipart==0.0.22
+python-multipart==0.0.27
     # via mcp
 pywin32==311 ; sys_platform == 'win32'
     # via mcp
