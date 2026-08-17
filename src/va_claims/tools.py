@@ -1,6 +1,138 @@
 import httpx
 
-from src.va_claims.utils import build_representative_headers, call_api, get_token
+from src.va_claims.utils import build_representative_headers, call_api, format_api_error, get_token
+
+
+def validate_526_claim(claim_data: dict) -> list[str]:
+    """
+    Pre-flight validation of a 526EZ claim payload against the VA schema's
+    required fields. Returns a list of human-readable problems (empty if valid).
+
+    This mirrors the "required" constraints in the POST /forms/526 request
+    schema so the caller gets an actionable message instead of a raw VA 422.
+    It intentionally checks presence/shape only — the VA remains the source of
+    truth for full validation (patterns, enums, dates).
+    """
+    problems: list[str] = []
+
+    if not isinstance(claim_data, dict):
+        return ["claim_data must be a JSON object (the 526 'attributes')."]
+
+    # Keys the VA 526 schema allows on currentMailingAddress. The schema uses
+    # additionalProperties: false, so any other key (e.g. the common mistake
+    # "addressType" — the correct field is "type") triggers a 422.
+    allowed_address_keys = {
+        "addressLine1",
+        "addressLine2",
+        "addressLine3",
+        "city",
+        "country",
+        "zipFirstFive",
+        "zipLastFour",
+        "internationalPostalCode",
+        "type",
+        "state",
+        "militaryStateCode",
+        "militaryPostOfficeTypeCode",
+    }
+
+    # Top-level required keys (schema: required veteran, serviceInformation,
+    # disabilities, standardClaim, autoCestPDFGenerationDisabled).
+    for key in (
+        "veteran",
+        "serviceInformation",
+        "disabilities",
+        "standardClaim",
+        "autoCestPDFGenerationDisabled",
+    ):
+        if key not in claim_data:
+            problems.append(f"Missing required field: {key}")
+
+    # veteran: required currentMailingAddress + currentlyVAEmployee.
+    veteran = claim_data.get("veteran")
+    if isinstance(veteran, dict):
+        if "currentlyVAEmployee" not in veteran:
+            problems.append("Missing required field: veteran.currentlyVAEmployee (boolean)")
+        addr = veteran.get("currentMailingAddress")
+        if not isinstance(addr, dict):
+            problems.append("Missing required field: veteran.currentMailingAddress")
+        else:
+            # Reject unknown keys up front (schema is additionalProperties: false).
+            for key in addr:
+                if key not in allowed_address_keys:
+                    hint = ""
+                    if key == "addressType":
+                        hint = ' (use "type" instead of "addressType")'
+                    problems.append(
+                        f"Unknown field veteran.currentMailingAddress.{key} is not "
+                        f"allowed by the VA schema{hint}"
+                    )
+            addr_type = addr.get("type", "DOMESTIC")
+            if addr_type == "DOMESTIC":
+                required_addr = ["addressLine1", "city", "country", "zipFirstFive", "state"]
+            elif addr_type == "INTERNATIONAL":
+                required_addr = ["addressLine1", "city", "country", "internationalPostalCode"]
+            elif addr_type == "MILITARY":
+                required_addr = [
+                    "addressLine1",
+                    "country",
+                    "zipFirstFive",
+                    "militaryStateCode",
+                    "militaryPostOfficeTypeCode",
+                ]
+            else:
+                required_addr = []
+                problems.append(
+                    f"veteran.currentMailingAddress.type must be DOMESTIC, "
+                    f"INTERNATIONAL, or MILITARY (got {addr_type!r})"
+                )
+            for field in required_addr:
+                if not addr.get(field):
+                    problems.append(
+                        f"Missing required field: veteran.currentMailingAddress.{field} "
+                        f"(required for {addr_type} address)"
+                    )
+    elif veteran is not None:
+        problems.append("veteran must be a JSON object")
+
+    # serviceInformation: required servicePeriods (>=1), each with branch + dates.
+    service_info = claim_data.get("serviceInformation")
+    if isinstance(service_info, dict):
+        periods = service_info.get("servicePeriods")
+        if not isinstance(periods, list) or not periods:
+            problems.append(
+                "serviceInformation.servicePeriods must be a non-empty array"
+            )
+        else:
+            for i, period in enumerate(periods):
+                if not isinstance(period, dict):
+                    problems.append(f"serviceInformation.servicePeriods[{i}] must be an object")
+                    continue
+                for field in ("serviceBranch", "activeDutyBeginDate", "activeDutyEndDate"):
+                    if not period.get(field):
+                        problems.append(
+                            f"Missing required field: "
+                            f"serviceInformation.servicePeriods[{i}].{field}"
+                        )
+    elif service_info is not None:
+        problems.append("serviceInformation must be a JSON object")
+
+    # disabilities: required array (>=1), each with disabilityActionType + name.
+    disabilities = claim_data.get("disabilities")
+    if isinstance(disabilities, list):
+        if not disabilities:
+            problems.append("disabilities must be a non-empty array")
+        for i, disability in enumerate(disabilities):
+            if not isinstance(disability, dict):
+                problems.append(f"disabilities[{i}] must be an object")
+                continue
+            for field in ("disabilityActionType", "name"):
+                if not disability.get(field):
+                    problems.append(f"Missing required field: disabilities[{i}].{field}")
+    elif disabilities is not None:
+        problems.append("disabilities must be a non-empty array")
+
+    return problems
 
 
 def register_tools(mcp):
@@ -35,7 +167,7 @@ def register_tools(mcp):
         try:
             return await call_api(token.token, "claims", extra_headers=rep_headers)
         except httpx.HTTPStatusError as e:
-            return {"error": f"API error: {e.response.status_code}", "detail": str(e)}
+            return format_api_error(e)
 
     @mcp.tool()
     async def get_claim_status(
@@ -68,7 +200,7 @@ def register_tools(mcp):
         try:
             return await call_api(token.token, f"claims/{claim_id}", extra_headers=rep_headers)
         except httpx.HTTPStatusError as e:
-            return {"error": f"API error: {e.response.status_code}", "detail": str(e)}
+            return format_api_error(e)
 
     @mcp.tool()
     async def submit_disability_claim(
@@ -101,8 +233,13 @@ def register_tools(mcp):
             claim_data: The 526EZ claim attributes. Required top-level fields:
                 - veteran: object with currentMailingAddress and currentlyVAEmployee
                     - currentMailingAddress: addressLine1, city, country, zipFirstFive,
-                      state (for DOMESTIC type)
+                      state (for DOMESTIC type). The residence type field is named
+                      "type" (NOT "addressType") with values DOMESTIC / INTERNATIONAL
+                      / MILITARY.
                     - currentlyVAEmployee: boolean
+                IMPORTANT: The VA 526 schema is strict (additionalProperties: false).
+                Do NOT invent or rename fields — any key not defined in the schema
+                (e.g. "addressType") causes a 422 rejection.
                 - serviceInformation: object with servicePeriods array, each entry
                   requiring serviceBranch, activeDutyBeginDate, activeDutyEndDate
                 - disabilities: array of objects, each requiring disabilityActionType
@@ -154,6 +291,17 @@ def register_tools(mcp):
         if token is None:
             return {"error": "Not authenticated"}
 
+        # Pre-flight validation against the 526 schema's required fields so the
+        # caller gets an actionable message instead of a raw VA 422.
+        problems = validate_526_claim(claim_data)
+        if problems:
+            return {
+                "error": "Invalid claim_data",
+                "detail": problems,
+                "hint": "Fix the listed fields and resubmit. See the tool "
+                "description for the full 526EZ claim_data shape.",
+            }
+
         rep_headers = build_representative_headers(
             veteran_ssn, veteran_first_name, veteran_last_name, veteran_birth_date
         )
@@ -166,7 +314,7 @@ def register_tools(mcp):
                 extra_headers=rep_headers,
             )
         except httpx.HTTPStatusError as e:
-            return {"error": f"API error: {e.response.status_code}", "detail": str(e)}
+            return format_api_error(e)
 
     @mcp.tool()
     async def get_intent_to_file(
@@ -208,7 +356,7 @@ def register_tools(mcp):
                 extra_headers=rep_headers,
             )
         except httpx.HTTPStatusError as e:
-            return {"error": f"API error: {e.response.status_code}", "detail": str(e)}
+            return format_api_error(e)
 
     @mcp.tool()
     async def submit_intent_to_file(
@@ -256,7 +404,7 @@ def register_tools(mcp):
                 extra_headers=rep_headers,
             )
         except httpx.HTTPStatusError as e:
-            return {"error": f"API error: {e.response.status_code}", "detail": str(e)}
+            return format_api_error(e)
 
     @mcp.tool()
     async def get_active_poa(
@@ -288,7 +436,7 @@ def register_tools(mcp):
         try:
             return await call_api(token.token, "forms/2122/active", extra_headers=rep_headers)
         except httpx.HTTPStatusError as e:
-            return {"error": f"API error: {e.response.status_code}", "detail": str(e)}
+            return format_api_error(e)
 
     @mcp.tool()
     async def get_poa_status(
@@ -325,7 +473,7 @@ def register_tools(mcp):
         try:
             return await call_api(token.token, f"forms/2122/{poa_id}", extra_headers=rep_headers)
         except httpx.HTTPStatusError as e:
-            return {"error": f"API error: {e.response.status_code}", "detail": str(e)}
+            return format_api_error(e)
 
     @mcp.tool()
     async def submit_poa(
@@ -393,4 +541,4 @@ def register_tools(mcp):
                 extra_headers=rep_headers,
             )
         except httpx.HTTPStatusError as e:
-            return {"error": f"API error: {e.response.status_code}", "detail": str(e)}
+            return format_api_error(e)

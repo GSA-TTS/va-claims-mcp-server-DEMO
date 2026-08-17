@@ -97,6 +97,23 @@ async def call_api(
             raise
 
 
+def format_api_error(e: httpx.HTTPStatusError) -> dict:
+    """
+    Build an error dict that surfaces the VA API's response body.
+
+    The VA endpoints return a JSON:API `errors` array on 4xx responses (e.g. a
+    422 names the invalid/missing fields). Without this, callers only see the
+    status code and cannot tell what to fix.
+    """
+    status = e.response.status_code
+    try:
+        body = e.response.json()
+    except Exception:
+        body = e.response.text
+    return {"error": f"API error: {status}", "detail": body}
+
+
+
 def get_token() -> AccessToken | None:
     """Get the access token for the authenticated user."""
     token = get_access_token()

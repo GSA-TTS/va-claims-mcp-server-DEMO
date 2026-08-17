@@ -30,7 +30,7 @@ An MCP (Model Context Protocol) server that provides secure access to VA.gov Ben
 
 1. Register for API access at [developer.va.gov](https://developer.va.gov)
 2. Create an application and obtain OAuth credentials
-3. Set your redirect URI to: `https://your-server-url/auth/callback`
+3. Set your redirect URI to: `https://your-server-url/oauth/callback`
 
 ### Local Development
 
@@ -69,16 +69,16 @@ An MCP (Model Context Protocol) server that provides secure access to VA.gov Ben
    cf login -a api.fr.cloud.gov --sso
    ```
 
-2. Set environment variables:
+2. Create your deployment vars file from the template and fill in your credentials:
    ```bash
-   cf set-env va-claims-mcp-server BASE_URL https://va-claims-mcp.app.cloud.gov
-   cf set-env va-claims-mcp-server VA_CLIENT_ID <your-client-id>
-   cf set-env va-claims-mcp-server VA_CLIENT_SECRET <your-client-secret>
+   cp vars.yml.example vars.yml
+   # Edit vars.yml with your VA OAuth credentials (client id/secret, base URL).
+   # vars.yml is gitignored — never commit it.
    ```
 
-3. Deploy:
+3. Deploy in a single push (secrets are substituted from vars.yml):
    ```bash
-   cf push
+   cf push --vars-file vars.yml
    ```
 
 ## Environment Variables
@@ -93,11 +93,18 @@ An MCP (Model Context Protocol) server that provides secure access to VA.gov Ben
 
 ## Production Configuration
 
-For production deployment, update the environment variables:
+For production deployment, set the production API/OAuth URLs in your `vars.yml`
+before pushing (see the commented production block in `vars.yml.example`):
+
+```yaml
+va_api_base: https://api.va.gov/services/claims/v2
+va_oauth_base: https://api.va.gov/oauth2
+```
+
+Then deploy as usual:
 
 ```bash
-cf set-env va-claims-mcp-server VA_API_BASE https://api.va.gov/services/claims/v2
-cf set-env va-claims-mcp-server VA_OAUTH_BASE https://api.va.gov/oauth2
+cf push --vars-file vars.yml
 ```
 
 ## API Reference

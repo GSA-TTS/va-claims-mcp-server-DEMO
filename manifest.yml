@@ -3,16 +3,16 @@ applications:
   - name: va-claims-mcp-server
     buildpacks:
       - python_buildpack
-    memory: 512M
+    memory: 500M
     disk_quota: 1G
     instances: 1
 
     # FastMCP HTTP server - uses PORT env var from cloud.gov
-    command: PYTHONPATH=src uvicorn src.va_claims.server:app --host 0.0.0.0 --port $PORT
+    command: PYTHONPATH=src python -m src.va_claims.server
 
     # Public route for MCP clients (auth handled by the server via VA OAuth)
     routes:
-      - route: va-claims-mcp.app.cloud.gov
+      - route: va-benefits-mcp.app.cloud.gov
 
     # Health check
     health-check-type: http
@@ -25,8 +25,15 @@ applications:
       # Use sandbox by default (set to "false" for production)
       USE_SANDBOX: "true"
 
-      # Authentication via VA OAuth
-      # Set these via `cf set-env` for security:
-      #   cf set-env va-claims-mcp-server BASE_URL https://va-claims-mcp.app.cloud.gov
-      #   cf set-env va-claims-mcp-server VA_CLIENT_ID <your-client-id>
-      #   cf set-env va-claims-mcp-server VA_CLIENT_SECRET <your-client-secret>
+      # Authentication via VA OAuth.
+      # Values are substituted from a vars file at push time:
+      #   cp vars.yml.example vars.yml   # then edit with real credentials
+      #   cf push --vars-file vars.yml
+      # vars.yml is gitignored and must never be committed.
+      BASE_URL: ((base_url))
+      VA_CLIENT_ID: ((va_client_id))
+      VA_CLIENT_SECRET: ((va_client_secret))
+
+      # VA API / OAuth base URLs (defaults are sandbox; override in vars.yml for prod)
+      VA_API_BASE: ((va_api_base))
+      VA_OAUTH_BASE: ((va_oauth_base))
