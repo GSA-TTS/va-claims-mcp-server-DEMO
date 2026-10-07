@@ -1,0 +1,23 @@
+# Cloud.gov deployment variables for `cf push --vars-file vars.yml`
+#
+# Usage:
+#   cp vars.yml.example vars.yml
+#   # edit vars.yml with your real VA OAuth credentials
+#   cf push --vars-file vars.yml
+#
+# vars.yml contains secrets and is gitignored. NEVER commit it.
+
+# Server's public URL (used for the OAuth redirect)
+base_url: https://va-benefits-mcp.app.cloud.gov
+
+# VA OAuth credentials (from developer.va.gov)
+va_client_id: your_client_id_here
+va_client_secret: your_client_secret_here
+
+# VA API / OAuth base URLs.
+# Sandbox (default):
+va_api_base: https://sandbox-api.va.gov/services/claims/v1
+va_oauth_base: https://sandbox-api.va.gov/oauth2/claims/v1
+# Production (uncomment / replace the two lines above):
+# va_api_base: https://api.va.gov/services/claims/v2
+# va_oauth_base: https://api.va.gov/oauth2

@@ -114,6 +114,10 @@ def create_oauth_provider(
         upstream_revocation_endpoint=f"{oauth_base}/revoke",
         token_verifier=token_verifier,
         base_url=base_url,
+        # OAuth callback path. Combined with base_url this yields the redirect URI
+        # you must register at developer.va.gov, e.g.:
+        #   https://va-benefits-mcp.app.cloud.gov/oauth/callback
+        redirect_path="/oauth/callback",
         # VA confidential clients use client_secret_basic (Authorization: Basic header),
         # not PKCE. PKCE is a separate VA flow for public clients without a secret.
         forward_pkce=False,

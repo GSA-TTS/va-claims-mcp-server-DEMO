@@ -14,3 +14,8 @@ htmlcov/
 .vscode/
 *.md
 tests/
+
+# Deployment vars file is read locally by the cf CLI for substitution;
+# it does not need to be uploaded into the app droplet.
+vars.yml
+vars.yml.example
