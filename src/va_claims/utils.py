@@ -9,6 +9,8 @@ from src.va_claims.config import API_BASE
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def build_representative_headers(
@@ -89,29 +91,17 @@ async def call_api(
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error: {e.response.status_code}")
-            logger.error(f"Response body: {e.response.text}")
+            logger.error("VA API request failed with status %s", e.response.status_code)
             raise
         except Exception as e:
-            logger.error(f"Unexpected error: {type(e).__name__}: {e}")
+            logger.error("VA API request failed with unexpected error type %s", type(e).__name__)
             raise
 
 
 def format_api_error(e: httpx.HTTPStatusError) -> dict:
-    """
-    Build an error dict that surfaces the VA API's response body.
-
-    The VA endpoints return a JSON:API `errors` array on 4xx responses (e.g. a
-    422 names the invalid/missing fields). Without this, callers only see the
-    status code and cannot tell what to fix.
-    """
+    """Build an MCP-safe error without exposing the VA API response body."""
     status = e.response.status_code
-    try:
-        body = e.response.json()
-    except Exception:
-        body = e.response.text
-    return {"error": f"API error: {status}", "detail": body}
-
+    return {"error": "VA API request failed", "status": status}
 
 
 def get_token() -> AccessToken | None:
